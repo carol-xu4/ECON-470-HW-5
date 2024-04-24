@@ -39,7 +39,7 @@ ggplot(final.insurance3, aes(x = year, y = share3)) +
     x = "Year",
     y = "Proportion of Adult Population") +
     theme_minimal()
-ggsave("Q2.png")
+ggsave("Q3.png")
 
 # 4. Share of uninsured over time, by states that expanded Medicaid in 2014 
 medicaid_expansion = read.table("data/output/acs_medicaid.txt", header = TRUE, sep = "\t")
@@ -80,8 +80,6 @@ ggsave("Q4.png")
 # ESTIMATE ATES
 
 # 5. Average percent of uninsured individuals in 2012 and 2015, by expansion and non-expansion states
-install.packages("modelsummary")
-
 medicaid_expansion5 = medicaid_expansion %>%
     group_by(State, year) %>%
     mutate(percent_uninsured = uninsured / adult_pop) %>%
@@ -90,7 +88,8 @@ medicaid_expansion5 = medicaid_expansion %>%
 average_uninsured = medicaid_expansion5 %>%
     group_by(year) %>%
     mutate(average_uninsured = mean(percent_uninsured))
-    # average percent uninsured in 2012 and 2015 are 18.68% and 12.12%
+    #     # average percent uninsured in 2012 and 2015 are 18.68% and 12.12%
+
 
 # 6. Effect of Medicaid expansion on uninsurance rate using standard DD regression estimator
 medicaid_expansion6 = medicaid_expansion %>% filter(expand_year==2014 | is.na(expand_year), !is.na(expand_ever)) %>%
@@ -101,3 +100,51 @@ medicaid_expansion6 = medicaid_expansion %>% filter(expand_year==2014 | is.na(ex
 m.dd = lm(percent_uninsured ~ post + expand_ever + treat, data=medicaid_expansion6)
 print(m.dd)
 
+# 7. state and year fixed effects
+install.packages("lfe")
+library(lfe)
+
+m.dd2 = felm(percent_uninsured ~ post + expand_ever + treat | State + year, data = medicaid_expansion6)
+print(m.dd2)
+
+# 8. State and year fixed effects on all states
+medicaid_expansion8 = medicaid_expansion %>%
+mutate(percent_uninsured = uninsured / adult_pop,
+         post = (year>=2014), 
+         treat=post*expand_ever)
+
+m.dd3 = felm(percent_uninsured ~ post + expand_ever + treat | State + year, data = medicaid_expansion8)
+print(m.dd3)
+
+# 9. Event study graph
+install.packages("fixest")
+library(fixest)
+
+reg.dat = medicaid_expansion8 %>% 
+  filter(expand_year==2014 | is.na(expand_year), !is.na(expand_ever)) %>%
+  mutate(perc_unins=uninsured/adult_pop,
+         post = (year>=2014), 
+         treat=post*expand_ever)
+
+mod.twfe <- feols(perc_unins~i(year, expand_ever, ref=2014) | State + year,
+                  cluster=~State,
+                  data=reg.dat)
+
+iplot(mod.twfe, 
+      xlab = 'Time to treatment',
+      main = 'Event study')
+
+# 10. 
+reg.dat2 = medicaid_expansion %>% 
+  filter(expand_year==2014 | is.na(expand_year), !is.na(expand_ever)) %>%
+  mutate(perc_unins=uninsured/adult_pop,
+         post = (year>=2014), 
+         treat=post*expand_ever)
+
+mod.twfe2 <- feols(perc_unins~i(year, expand_ever, ref=2014) | State + year,
+                  cluster=~State,
+                  data=reg.dat)
+
+iplot(mod.twfe2, 
+      xlab = 'Time to treatment',
+      main = 'Event study')
