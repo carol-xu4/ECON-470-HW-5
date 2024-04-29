@@ -81,15 +81,13 @@ ggsave("Q4.png")
 
 # 5. Average percent of uninsured individuals in 2012 and 2015, by expansion and non-expansion states
 medicaid_expansion5 = medicaid_expansion %>%
-    group_by(State, year) %>%
+    group_by(State) %>%
     mutate(percent_uninsured = uninsured / adult_pop) %>%
     filter(year %in% c(2012, 2015))
 
 average_uninsured = medicaid_expansion5 %>%
-    group_by(year) %>%
+    group_by(expand_ever, year) %>%
     mutate(average_uninsured = mean(percent_uninsured))
-    #     # average percent uninsured in 2012 and 2015 are 18.68% and 12.12%
-
 
 # 6. Effect of Medicaid expansion on uninsurance rate using standard DD regression estimator
 medicaid_expansion6 = medicaid_expansion %>% filter(expand_year==2014 | is.na(expand_year), !is.na(expand_ever)) %>%
@@ -126,7 +124,7 @@ reg.dat = medicaid_expansion8 %>%
          post = (year>=2014), 
          treat=post*expand_ever)
 
-mod.twfe <- feols(perc_unins~i(year, expand_ever, ref=2014) | State + year,
+mod.twfe <- feols(perc_unins~i(year, expand_ever, ref=2013) | State + year,
                   cluster=~State,
                   data=reg.dat)
 
@@ -141,10 +139,27 @@ reg.dat2 = medicaid_expansion %>%
          post = (year>=2014), 
          treat=post*expand_ever)
 
-mod.twfe2 <- feols(perc_unins~i(year, expand_ever, ref=2014) | State + year,
+mod.twfe2 = feols(perc_unins~i(year, expand_ever, ref=2014) | State + year,
                   cluster=~State,
                   data=reg.dat)
 
 iplot(mod.twfe2, 
+      xlab = 'Time to treatment',
+      main = 'Event study')
+
+
+reg.dat2 = medicaid_expansion %>% 
+  filter(!is.na(expand_ever)) %>%
+  mutate(perc_unins=uninsured/adult_pop,
+         post = (year>=2014), 
+         treat=post*expand_ever,
+         time_to_treat = ifelse(expand_ever==FALSE, 0, year-expand_year),
+         time_to_treat = ifelse(time_to_treat < -3, -3, time_to_treat))
+
+mod.twfe = feols(perc_unins~i(time_to_treat, expand_ever, ref=-1) | State + year,
+                  cluster=~State,
+                  data=reg.dat2)
+
+iplot(mod.twfe, 
       xlab = 'Time to treatment',
       main = 'Event study')
